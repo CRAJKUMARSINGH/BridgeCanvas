@@ -14,7 +14,7 @@ This is a Flask-based web application for processing bridge design parameters fr
 ✓ **Web Interface Fix**: Resolved template rendering issues and added template download functionality
 ✓ **SVG Preview**: Working bridge design preview with visual representation of generated CAD drawings
 
-**Latest Enhancement**: Restored missing abutments and added comprehensive plan view drawings as per original BridgeCanvas logic including pier footings, abutment plans with proper coordinate transformations.
+**Latest Enhancement**: Successfully restored missing abutments using original abt1/abt2 functions from working code and added comprehensive plan view drawings as per original BridgeCanvas logic including pier footings, abutment plans with proper coordinate transformations. Both elevation and plan views now working correctly with 50KB DXF files.
 
 ## User Preferences
 

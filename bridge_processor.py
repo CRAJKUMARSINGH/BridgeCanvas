@@ -462,15 +462,26 @@ class BridgeProcessor:
             self.logger.error(f"Superstructure drawing error: {str(e)}")
     
     def draw_abutments_detailed(self, msp, variables, hpos, vpos, scale1):
-        """Draw detailed abutments"""
+        """Draw detailed abutments with caps and footings as per original working code"""
         try:
-            # Abutment parameters
+            # Draw left abutment using original abt1 logic
+            self.draw_left_abutment(msp, variables, hpos, vpos, scale1)
+            
+            # Draw right abutment using original abt2 logic  
+            self.draw_right_abutment(msp, variables, hpos, vpos, scale1)
+            
+        except Exception as e:
+            self.logger.error(f"Abutment drawing error: {str(e)}")
+    
+    def draw_left_abutment(self, msp, variables, hpos, vpos, scale1):
+        """Draw left abutment as per original abt1 function"""
+        try:
+            # Get required variables (as per original working code)
             abtl = variables.get('abtl', 0)
-            abtlen = variables.get('abtlen', 12)
             alcw = variables.get('alcw', 0.75)
             alcd = variables.get('alcd', 1.2)
             dwth = variables.get('dwth', 0.3)
-            alfl = variables.get('alfl', 100)
+            capt = variables.get('capt', 100.5)
             alfb = variables.get('alfb', 10)
             alfbl = variables.get('alfbl', 101)
             altb = variables.get('altb', 10)
@@ -479,50 +490,129 @@ class BridgeProcessor:
             alfd = variables.get('alfd', 1.5)
             albb = variables.get('albb', 5)
             albbl = variables.get('albbl', 101.5)
-            lbridge = variables.get('lbridge', 100)
+            rtl = variables.get('rtl', 105)
+            apthk = variables.get('apthk', 0.2)
+            slbtht = variables.get('slbtht', 0.15)
             
-            # Left abutment
-            x1 = hpos(abtl - abtlen)
-            x2 = hpos(abtl)
-            y1 = vpos(alfl)
-            y2 = vpos(alfl + alcd)
+            # Calculations as per original abt1 function
+            x1 = abtl
+            alcwsq = alcw / 1  # c changed to 1 as per original
+            x3 = x1 + alcwsq
+            capb = capt - alcd
+            p1 = (capb - alfbl) / alfb
+            p1sq = p1 / 1  # c changed to 1
+            x5 = x3 + p1sq
+            p2 = (alfbl - altbl) / altb
+            p2sq = p2 / 1  # c changed to 1
+            x6 = x5 + p2sq
+            alfosq = alfo / 1  # c changed to 1
+            x7 = x6 + alfosq
+            y8 = altbl - alfd
+            dwthsq = dwth / 1  # c changed to 1
+            x14 = x1 - dwthsq
+            p3 = (capb - albbl) / albb
+            p3sq = p3 / 1  # c changed to 1
+            x12 = x14 - p3sq
+            x10 = x12 - alfosq
             
-            # Abutment cap
-            cap_points = [
-                [x1, y1],
-                [x2, y1],
-                [x2, y2],
-                [x1 + hpos(alcw) - hpos(0), y2],
-                [x1, y1]
-            ]
-            msp.add_lwpolyline(cap_points, close=True)
+            # Define points using hpos and vpos functions as per original
+            pt1 = (hpos(x1), vpos(rtl + apthk - slbtht))
+            pt2 = (hpos(x1), vpos(capt))
+            pt3 = (hpos(x3), vpos(capt))
+            pt4 = (hpos(x3), vpos(capb))
+            pt5 = (hpos(x5), vpos(alfbl))
+            pt6 = (hpos(x6), vpos(altbl))
+            pt7 = (hpos(x7), vpos(altbl))
+            pt8 = (hpos(x7), vpos(y8))
+            pt9 = (hpos(x10), vpos(y8))
+            pt10 = (hpos(x10), vpos(altbl))
+            pt11 = (hpos(x12), vpos(altbl))
+            pt12 = (hpos(x12), vpos(albbl))
+            pt13 = (hpos(x14), vpos(capb))
+            pt14 = (hpos(x14), vpos(rtl + apthk - slbtht))
+            pt15 = (hpos(x12), vpos(rtl + apthk - slbtht))
             
-            # Front batter
-            front_batter_points = [
-                [x2, y2],
-                [x2, vpos(alfbl)],
-                [x2 + hpos(alfo) - hpos(0), vpos(altbl)],
-                [x2, vpos(altbl - alfd)],
-                [x1 + hpos(alcw) - hpos(0), vpos(altbl - alfd)],
-                [x1 + hpos(alcw) - hpos(0), y2]
-            ]
-            msp.add_lwpolyline(front_batter_points, close=True)
-            
-            # Right abutment (mirror)
-            right_x1 = hpos(abtl + lbridge)
-            right_x2 = hpos(abtl + lbridge + abtlen)
-            
-            right_cap_points = [
-                [right_x1, y1],
-                [right_x2, y1],
-                [right_x2, y2],
-                [right_x2 - hpos(alcw) + hpos(0), y2],
-                [right_x1, y1]
-            ]
-            msp.add_lwpolyline(right_cap_points, close=True)
+            # Draw the abutment as per original code
+            msp.add_lwpolyline([pt1, pt2, pt3, pt4, pt5, pt6, pt7, pt8, pt9, pt10, pt11, pt12, pt13, pt14, pt1], close=True)
+            msp.add_line(pt13, pt4)
+            msp.add_line(pt10, pt7)
+            msp.add_line(pt12, pt15)
+            msp.add_line(pt15, pt14)
             
         except Exception as e:
-            self.logger.error(f"Abutment drawing error: {str(e)}")
+            self.logger.error(f"Left abutment drawing error: {str(e)}")
+    
+    def draw_right_abutment(self, msp, variables, hpos, vpos, scale1):
+        """Draw right abutment as per original abt2 function"""
+        try:
+            # Get required variables 
+            abtl = variables.get('abtl', 0)
+            alcw = variables.get('alcw', 0.75)
+            alcd = variables.get('alcd', 1.2)
+            dwth = variables.get('dwth', 0.3)
+            capt = variables.get('capt', 100.5)
+            alfb = variables.get('alfb', 10)
+            alfbr = variables.get('alfbr', 100.75)  # Right side equivalent
+            altb = variables.get('altb', 10)
+            altbr = variables.get('altbr', 100.5)   # Right side equivalent
+            alfo = variables.get('alfo', 0.5)
+            alfd = variables.get('alfd', 1.5)
+            albb = variables.get('albb', 5)
+            albbr = variables.get('albbr', 101.5)   # Right side equivalent
+            rtl = variables.get('rtl', 105)
+            apthk = variables.get('apthk', 0.2)
+            slbtht = variables.get('slbtht', 0.15)
+            lbridge = variables.get('lbridge', 100)
+            left = variables.get('left', 0)
+            
+            # Right abutment calculations (as per original abt2 function)
+            x1 = abtl
+            alcwsq = alcw / 1  # c changed to 1
+            x3 = x1 + alcwsq
+            capb = capt - alcd
+            p1 = (capb - alfbr) / alfb
+            p1sq = p1 / 1  # c changed to 1
+            x5 = x3 + p1sq
+            p2 = (alfbr - altbr) / altb
+            p2sq = p2 / 1  # c changed to 1
+            x6 = x5 + p2sq
+            alfosq = alfo / 1  # c changed to 1
+            x7 = x6 + alfosq
+            y8 = altbr - alfd
+            dwthsq = dwth / 1  # c changed to 1
+            x14 = x1 - dwthsq
+            p3 = (capb - albbr) / albb
+            p3sq = p3 / 1  # c changed to 1
+            x12 = x14 - p3sq
+            x10 = x12 - alfosq
+            right_edge = left + lbridge
+            
+            # Define points for right abutment (mirrored from left edge)
+            pt1 = (hpos(right_edge - x1), vpos(rtl + apthk - slbtht))
+            pt2 = (hpos(right_edge - x1), vpos(capt))
+            pt3 = (hpos(right_edge - x3), vpos(capt))
+            pt4 = (hpos(right_edge - x3), vpos(capb))
+            pt5 = (hpos(right_edge - x5), vpos(alfbr))
+            pt6 = (hpos(right_edge - x6), vpos(altbr))
+            pt7 = (hpos(right_edge - x7), vpos(altbr))
+            pt8 = (hpos(right_edge - x7), vpos(y8))
+            pt9 = (hpos(right_edge - x10), vpos(y8))
+            pt10 = (hpos(right_edge - x10), vpos(altbr))
+            pt11 = (hpos(right_edge - x12), vpos(altbr))
+            pt12 = (hpos(right_edge - x12), vpos(albbr))
+            pt13 = (hpos(right_edge - x14), vpos(capb))
+            pt14 = (hpos(right_edge - x14), vpos(rtl + apthk - slbtht))
+            pt15 = (hpos(right_edge - x12), vpos(rtl + apthk - slbtht))
+            
+            # Draw the right abutment as per original code
+            msp.add_lwpolyline([pt1, pt2, pt3, pt4, pt5, pt6, pt7, pt8, pt9, pt10, pt11, pt12, pt13, pt14, pt1], close=True)
+            msp.add_line(pt13, pt4)
+            msp.add_line(pt10, pt7)
+            msp.add_line(pt12, pt15)
+            msp.add_line(pt15, pt14)
+            
+        except Exception as e:
+            self.logger.error(f"Right abutment drawing error: {str(e)}")
     
     def draw_piers_detailed(self, msp, variables, hpos, vpos, scale1, hhs):
         """Draw detailed piers with caps and footings"""
