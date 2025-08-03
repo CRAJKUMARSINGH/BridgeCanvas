@@ -17,7 +17,7 @@ class BridgeProcessor:
             'ALTBR', 'ALFD', 'ALBBR'
         ]
     
-    def process_excel_file(self, filepath):
+    def process_excel_file(self, filepath, project_name=None):
         """Process Excel file and generate bridge drawings"""
         try:
             # Read Excel file
@@ -32,6 +32,12 @@ class BridgeProcessor:
             
             # Extract variables
             variables = self.extract_variables(df)
+            
+            # Add project name to variables
+            if project_name:
+                variables['project_name'] = project_name
+            else:
+                variables['project_name'] = 'BRIDGE PROJECT'
             
             # Generate DXF file
             dxf_filename = self.generate_dxf(variables)
@@ -191,6 +197,9 @@ class BridgeProcessor:
             
             # Draw plan view (top-down view) with footings and plan details
             self.draw_plan_view(msp, variables, hpos, vpos, scale1, hhs, vvs, datum, left)
+            
+            # Add drawing border and title block
+            self.draw_border_and_title(msp, doc, variables, scale1, left, datum)
             
             # Save DXF file
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -959,6 +968,238 @@ class BridgeProcessor:
             
         except Exception as e:
             self.logger.error(f"Bridge deck plan drawing error: {str(e)}")
+    
+    def draw_border_and_title(self, msp, doc, variables, scale1, left, datum):
+        """Add professional drawing border and title block with proportional fonts"""
+        try:
+            # Create text styles with proportional fonts
+            if 'ARIAL' not in doc.styles:
+                doc.styles.new('ARIAL', dxfattribs={'font': 'arial.ttf', 'width': 1.0})
+            if 'ARIAL_BOLD' not in doc.styles:
+                doc.styles.new('ARIAL_BOLD', dxfattribs={'font': 'arialbd.ttf', 'width': 1.0})
+            if 'TIMES' not in doc.styles:
+                doc.styles.new('TIMES', dxfattribs={'font': 'times.ttf', 'width': 1.0})
+            
+            # Get drawing extents
+            lbridge = variables.get('lbridge', 100)
+            toprl = variables.get('toprl', 105)
+            
+            # Define border coordinates (A1 size equivalent in mm)
+            border_margin = 50 * scale1
+            title_height = 200 * scale1
+            
+            # Calculate actual drawing extents first
+            drawing_left = left - 200 * scale1
+            drawing_right = left + lbridge + 200 * scale1
+            drawing_bottom = datum - 6000  # Plan view area (reduced)
+            drawing_top = toprl + 100 * scale1
+            
+            # Create proper A1-sized border (594mm x 841mm equivalent)
+            drawing_width = drawing_right - drawing_left
+            drawing_height = drawing_top - drawing_bottom
+            
+            # Center the drawing content within standard border
+            border_width = max(drawing_width + 400 * scale1, 1000 * scale1)  # Minimum width
+            border_height = max(drawing_height + 200 * scale1, 800 * scale1)  # Minimum height
+            
+            # Position border to contain all drawing elements
+            border_left = drawing_left - (border_width - drawing_width) / 2
+            border_right = border_left + border_width
+            border_bottom = drawing_bottom - 100 * scale1
+            border_top = border_bottom + border_height
+            
+            # Draw main border rectangle
+            border_points = [
+                [border_left, border_bottom],
+                [border_right, border_bottom],
+                [border_right, border_top],
+                [border_left, border_top],
+                [border_left, border_bottom]
+            ]
+            msp.add_lwpolyline(border_points, close=True, dxfattribs={'color': 7})
+            
+            # Draw inner border (drawing area)
+            inner_margin = 20 * scale1
+            inner_border_points = [
+                [border_left + inner_margin, border_bottom + inner_margin],
+                [border_right - inner_margin, border_bottom + inner_margin],
+                [border_right - inner_margin, border_top - inner_margin],
+                [border_left + inner_margin, border_top - inner_margin],
+                [border_left + inner_margin, border_bottom + inner_margin]
+            ]
+            msp.add_lwpolyline(inner_border_points, close=True, dxfattribs={'color': 7})
+            
+            # Title block area (bottom right corner)
+            title_width = 400 * scale1
+            title_x = border_right - title_width - inner_margin
+            title_y = border_bottom + inner_margin
+            
+            # Title block border
+            title_block_points = [
+                [title_x, title_y],
+                [border_right - inner_margin, title_y],
+                [border_right - inner_margin, title_y + title_height],
+                [title_x, title_y + title_height],
+                [title_x, title_y]
+            ]
+            msp.add_lwpolyline(title_block_points, close=True, dxfattribs={'color': 7})
+            
+            # Title block content
+            self.add_title_block_content(msp, variables, title_x, title_y, title_width, title_height, scale1)
+            
+            # Drawing title
+            self.add_drawing_title(msp, variables, border_left, border_top, scale1)
+            
+            # Scale and notes
+            self.add_scale_and_notes(msp, variables, border_left, border_bottom, scale1)
+            
+        except Exception as e:
+            self.logger.error(f"Border and title drawing error: {str(e)}")
+    
+    def add_title_block_content(self, msp, variables, x, y, width, height, scale1):
+        """Add content to the title block"""
+        try:
+            # Title block sections
+            line_height = 25 * scale1
+            text_height = 12 * scale1
+            small_text = 8 * scale1
+            
+            # Project title
+            title_y = y + height - line_height
+            project_title = variables.get('project_name', 'BRIDGE PROJECT').upper()
+            msp.add_text(project_title, 
+                        dxfattribs={'height': text_height * 1.5, 'style': 'ARIAL_BOLD',
+                                  'insert': (x + 10 * scale1, title_y), 'halign': 0})
+            
+            # Horizontal line under title
+            msp.add_line((x, title_y - 5 * scale1), (x + width, title_y - 5 * scale1), 
+                        dxfattribs={'color': 7})
+            
+            # Project information
+            info_y = title_y - 40 * scale1
+            bridge_length = variables.get('lbridge', 100)
+            nspan = int(variables.get('nspan', 1))
+            
+            msp.add_text(f"BRIDGE LENGTH: {bridge_length:.1f}m", 
+                        dxfattribs={'height': small_text, 'style': 'ARIAL',
+                                  'insert': (x + 10 * scale1, info_y), 'halign': 0})
+            
+            msp.add_text(f"NUMBER OF SPANS: {nspan}", 
+                        dxfattribs={'height': small_text, 'style': 'ARIAL',
+                                  'insert': (x + 10 * scale1, info_y - line_height), 'halign': 0})
+            
+            # Scale information
+            scale_y = info_y - 60 * scale1
+            scale1_val = variables.get('scale1', 1)
+            scale2_val = variables.get('scale2', 1)
+            
+            msp.add_text(f"ELEVATION SCALE: 1:{int(1000/scale1_val)}", 
+                        dxfattribs={'height': small_text, 'style': 'ARIAL',
+                                  'insert': (x + 10 * scale1, scale_y), 'halign': 0})
+            
+            msp.add_text(f"PLAN SCALE: 1:{int(1000*scale2_val/scale1_val)}", 
+                        dxfattribs={'height': small_text, 'style': 'ARIAL',
+                                  'insert': (x + 10 * scale1, scale_y - line_height), 'halign': 0})
+            
+            # Date and revision
+            from datetime import datetime
+            current_date = datetime.now().strftime("%d/%m/%Y")
+            
+            date_y = y + 30 * scale1
+            msp.add_text(f"DATE: {current_date}", 
+                        dxfattribs={'height': small_text, 'style': 'ARIAL',
+                                  'insert': (x + 10 * scale1, date_y), 'halign': 0})
+            
+            msp.add_text("REV: A", 
+                        dxfattribs={'height': small_text, 'style': 'ARIAL',
+                                  'insert': (x + width - 60 * scale1, date_y), 'halign': 0})
+            
+        except Exception as e:
+            self.logger.error(f"Title block content error: {str(e)}")
+    
+    def add_drawing_title(self, msp, variables, border_left, border_top, scale1):
+        """Add main drawing title"""
+        try:
+            project_name = variables.get('project_name', 'BRIDGE PROJECT').upper()
+            title_text = f"{project_name} - ELEVATION AND PLAN VIEWS"
+            title_height = 20 * scale1
+            title_y = border_top + 30 * scale1
+            
+            # Center the title within the border
+            title_x = border_left + (border_right - border_left) / 2
+            
+            msp.add_text(title_text, 
+                        dxfattribs={'height': title_height, 'style': 'ARIAL_BOLD',
+                                  'insert': (title_x, title_y), 'halign': 1})  # Center aligned
+            
+            # Underline
+            underline_length = len(title_text) * title_height * 0.6
+            msp.add_line((title_x - underline_length/2, title_y - 5 * scale1),
+                        (title_x + underline_length/2, title_y - 5 * scale1),
+                        dxfattribs={'color': 7})
+            
+        except Exception as e:
+            self.logger.error(f"Drawing title error: {str(e)}")
+    
+    def add_scale_and_notes(self, msp, variables, border_left, border_bottom, scale1):
+        """Add scale information and general notes"""
+        try:
+            notes_x = border_left + 30 * scale1
+            notes_y = border_bottom + 400 * scale1
+            text_height = 10 * scale1
+            line_spacing = 15 * scale1
+            
+            # Notes header
+            msp.add_text("GENERAL NOTES:", 
+                        dxfattribs={'height': text_height * 1.2, 'style': 'ARIAL_BOLD',
+                                  'insert': (notes_x, notes_y), 'halign': 0})
+            
+            # Notes content
+            notes = [
+                "1. ALL DIMENSIONS ARE IN METERS UNLESS OTHERWISE STATED",
+                "2. ELEVATION VIEW SHOWS BRIDGE SIDE PROFILE",
+                "3. PLAN VIEW SHOWS TOP-DOWN STRUCTURAL LAYOUT",
+                "4. REFER TO SPECIFICATION FOR MATERIAL DETAILS",
+                "5. CONTRACTOR TO VERIFY ALL DIMENSIONS ON SITE"
+            ]
+            
+            for i, note in enumerate(notes):
+                note_y = notes_y - (i + 1) * line_spacing * 1.5
+                msp.add_text(note, 
+                            dxfattribs={'height': text_height * 0.8, 'style': 'ARIAL',
+                                      'insert': (notes_x, note_y), 'halign': 0})
+            
+            # Drawing views labels
+            self.add_view_labels(msp, variables, scale1)
+            
+        except Exception as e:
+            self.logger.error(f"Scale and notes error: {str(e)}")
+    
+    def add_view_labels(self, msp, variables, scale1):
+        """Add labels for elevation and plan views"""
+        try:
+            left = variables.get('left', 0)
+            datum = variables.get('datum', 95)
+            lbridge = variables.get('lbridge', 100)
+            
+            # Elevation view label
+            elev_label_x = left + lbridge / 2
+            elev_label_y = datum + 200 * scale1
+            
+            msp.add_text("ELEVATION VIEW", 
+                        dxfattribs={'height': 15 * scale1, 'style': 'ARIAL_BOLD',
+                                  'insert': (elev_label_x, elev_label_y), 'halign': 1})
+            
+            # Plan view label
+            plan_label_x = left + lbridge / 2
+            plan_label_y = datum - 4800  # Plan view area
+            
+            msp.add_text("PLAN VIEW", 
+                        dxfattribs={'height': 15 * scale1, 'style': 'ARIAL_BOLD',
+                                  'insert': (plan_label_x, plan_label_y), 'halign': 1})
+            
+        except Exception as e:
+            self.logger.error(f"View labels error: {str(e)}")
     
     def generate_svg_preview(self, variables):
         """Generate SVG preview of the bridge design"""

@@ -9,7 +9,7 @@ This is a Flask-based web application for processing bridge design parameters fr
 ✓ **Complete Bridge Drawing Logic**: Integrated comprehensive drawing methods from original source code including detailed pier drawing with caps, columns, and footings
 ✓ **Excel Processing Fix**: Fixed header row handling and parameter validation for proper Excel file reading
 ✓ **Plan View Implementation**: Added complete plan view drawings with footing plans, abutment plans, pier layouts, and bridge deck outline using original h2pos/v2pos coordinate systems
-✓ **DXF Generation**: Successfully generating 48KB DXF files with both elevation and plan views, complete bridge geometry, layout grids, and coordinate transformations
+✓ **DXF Generation**: Successfully generating 54KB DXF files with both elevation and plan views, complete bridge geometry, layout grids, coordinate transformations, professional borders and title blocks
 ✓ **Template System**: Created downloadable Excel template with 54 bridge parameters and descriptions for new users
 ✓ **Web Interface Fix**: Resolved template rendering issues and added template download functionality
 ✓ **SVG Preview**: Working bridge design preview with visual representation of generated CAD drawings

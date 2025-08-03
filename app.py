@@ -66,10 +66,15 @@ def upload_file():
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
             
+            # Get project name from form
+            project_name = request.form.get('project_name', '').strip()
+            if not project_name:
+                project_name = "BRIDGE PROJECT"  # Default name
+            
             # Process the bridge design
             processor = BridgeProcessor()
             try:
-                results = processor.process_excel_file(filepath)
+                results = processor.process_excel_file(filepath, project_name=project_name)
                 
                 # Store results in session or database for retrieval
                 # For simplicity, we'll pass directly to results page
