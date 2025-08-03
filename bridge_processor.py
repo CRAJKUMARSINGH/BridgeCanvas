@@ -189,6 +189,9 @@ class BridgeProcessor:
             self.draw_piers_detailed(msp, variables, hpos, vpos, scale1, hhs)
             self.draw_approach_slabs(msp, variables, hpos, vpos, scale1)
             
+            # Draw plan view (top-down view) with footings and plan details
+            self.draw_plan_view(msp, variables, hpos, vpos, scale1, hhs, vvs, datum, left)
+            
             # Save DXF file
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"bridge_design_{timestamp}.dxf"
@@ -652,6 +655,220 @@ class BridgeProcessor:
             
         except Exception as e:
             self.logger.error(f"Approach slab drawing error: {str(e)}")
+    
+    def draw_plan_view(self, msp, variables, hpos, vpos, scale1, hhs, vvs, datum, left):
+        """Draw comprehensive plan view with footings, abutments, and piers as per original logic"""
+        try:
+            # Get plan view variables
+            nspan = int(variables.get('nspan', 1))
+            span1 = variables.get('span1', 30)  
+            lspan = variables.get('lspan', span1)
+            abtl = variables.get('abtl', 0)
+            capw = variables.get('capw', 1.2)
+            piertw = variables.get('piertw', 0.6)
+            pierst = variables.get('pierst', 5)
+            futw = variables.get('futw', 2.5)
+            futl = variables.get('futl', 3.5)
+            futrl = variables.get('futrl', 90)
+            futd = variables.get('futd', 2)
+            sc = scale1 / variables.get('scale2', 1)
+            
+            # Plan view coordinate transformation functions (as per original)
+            def h2pos(a):
+                return left + sc * hhs * (a - left)
+            
+            def v2pos(a):
+                return datum + sc * vvs * (a - datum)
+            
+            def p2t(a, b):
+                """Convert to plan view coordinates"""
+                aa = h2pos(a)
+                bb = v2pos(b)
+                return [aa, bb]
+            
+            # Offset for plan view positioning (below elevation view)
+            plan_offset_y = -5000  # Move plan view below elevation
+            
+            # Draw pier footings in plan view (as per original logic)
+            if nspan > 1:
+                self.draw_pier_footings_plan(msp, variables, h2pos, v2pos, p2t, plan_offset_y, nspan, lspan, hhs)
+            
+            # Draw abutment plans (left and right)
+            self.draw_abutment_plans(msp, variables, h2pos, v2pos, p2t, plan_offset_y, hhs, vvs, datum, left)
+            
+            # Draw bridge deck outline in plan
+            self.draw_bridge_deck_plan(msp, variables, h2pos, v2pos, p2t, plan_offset_y)
+            
+        except Exception as e:
+            self.logger.error(f"Plan view drawing error: {str(e)}")
+    
+    def draw_pier_footings_plan(self, msp, variables, h2pos, v2pos, p2t, plan_offset_y, nspan, lspan, hhs):
+        """Draw pier footings in plan view as per original logic"""
+        try:
+            # Get footing parameters
+            abtl = variables.get('abtl', 0)
+            futw = variables.get('futw', 2.5)  # Footing width
+            futl = variables.get('futl', 3.5)  # Footing length
+            datum = variables.get('datum', 95)
+            
+            # Plan view footing coordinates (as per original)
+            yc = datum - 30.0
+            
+            # Draw footings for each pier
+            for i in range(1, nspan):
+                # Pier center position
+                xc = abtl + i * lspan
+                
+                # Footing corners in plan (as per original pt function logic)
+                x7 = xc - futw / 2  # Left edge of footing
+                x8 = x7 + futw      # Right edge of footing
+                y7 = yc + futl / 2  # Top edge of footing
+                y8 = y7 - futl      # Bottom edge of footing
+                
+                # Convert to plan coordinates with offset
+                pta7 = p2t(x7, y7)
+                pta8 = p2t(x8, y8)
+                pta7x = [pta7[0], pta8[1] + plan_offset_y]  # Bottom-left
+                pta8x = [pta8[0], pta7[1] + plan_offset_y]  # Top-right
+                pta7[1] += plan_offset_y  # Apply offset to top-left
+                pta8[1] += plan_offset_y  # Apply offset to bottom-right
+                
+                # Draw footing rectangle (as per original gr1-gr4 functions)
+                footing_points = [pta7, pta8x, pta8, pta7x, pta7]
+                msp.add_lwpolyline(footing_points, close=True)
+                
+                # Draw pier column outline in plan
+                pier_width = variables.get('piertw', 0.6)
+                pier_length = variables.get('pierst', 5)
+                
+                # Pier corners
+                pier_x1 = xc - pier_width / 2
+                pier_x2 = xc + pier_width / 2
+                pier_y1 = yc + pier_length / 2
+                pier_y2 = yc - pier_length / 2
+                
+                # Convert pier coordinates
+                pier_pt1 = p2t(pier_x1, pier_y1)
+                pier_pt2 = p2t(pier_x2, pier_y1)
+                pier_pt3 = p2t(pier_x2, pier_y2)
+                pier_pt4 = p2t(pier_x1, pier_y2)
+                
+                # Apply offset
+                pier_pt1[1] += plan_offset_y
+                pier_pt2[1] += plan_offset_y
+                pier_pt3[1] += plan_offset_y
+                pier_pt4[1] += plan_offset_y
+                
+                # Draw pier outline
+                pier_points = [pier_pt1, pier_pt2, pier_pt3, pier_pt4, pier_pt1]
+                msp.add_lwpolyline(pier_points, close=True)
+                
+        except Exception as e:
+            self.logger.error(f"Pier footing plan drawing error: {str(e)}")
+    
+    def draw_abutment_plans(self, msp, variables, h2pos, v2pos, p2t, plan_offset_y, hhs, vvs, datum, left):
+        """Draw abutment plans (left and right) as per original abt1 and abt2 functions"""
+        try:
+            # Abutment parameters (as per original)
+            abtl = variables.get('abtl', 0)
+            abtlen = variables.get('abtlen', 12)
+            alcw = variables.get('alcw', 0.75)
+            alcd = variables.get('alcd', 1.2)
+            dwth = variables.get('dwth', 0.3)
+            lbridge = variables.get('lbridge', 100)
+            ccbr = variables.get('ccbr', 0.5)
+            kerbw = variables.get('kerbw', 0.3)
+            
+            # Plan view calculations (as per original abt1 function)
+            ccbrsq = ccbr / 1  # As per original c=1 
+            kerbwsq = kerbw / 1
+            abtlen_plan = ccbrsq + kerbwsq + kerbwsq
+            
+            yc = datum - 30.0
+            y20 = yc + (abtlen_plan / 2)   # D/S of abutment
+            y21 = y20 - abtlen_plan        # U/S of abutment  
+            y16 = y20 + 0.15               # D/S of footing
+            y17 = y21 - 0.15               # U/S of footing
+            
+            # Left abutment plan (as per original abt1)
+            x1 = abtl
+            alcwsq = alcw / 1
+            x3 = x1 + alcwsq
+            dwthsq = dwth / 1
+            x14 = x1 - dwthsq
+            
+            # Abutment footing points in plan
+            pt16 = p2t(x14, y16)  # Left footing corner
+            pt17 = p2t(x3, y16)   # Right footing corner  
+            pt18 = p2t(x3, y17)   # Right footing corner
+            pt19 = p2t(x14, y17)  # Left footing corner
+            
+            # Apply plan offset
+            pt16[1] += plan_offset_y
+            pt17[1] += plan_offset_y
+            pt18[1] += plan_offset_y
+            pt19[1] += plan_offset_y
+            
+            # Draw left abutment footing
+            left_abt_points = [pt16, pt17, pt18, pt19, pt16]
+            msp.add_lwpolyline(left_abt_points, close=True)
+            
+            # Right abutment plan (as per original abt2)  
+            right_edge = left + lbridge
+            x1_right = abtl
+            x3_right = x1_right + alcwsq
+            x14_right = x1_right - dwthsq
+            
+            # Right abutment footing points
+            pt20 = p2t(right_edge - x14_right, y16)  # Right footing corner
+            pt21 = p2t(right_edge - x3_right, y16)   # Left footing corner
+            pt22 = p2t(right_edge - x3_right, y17)   # Left footing corner
+            pt23 = p2t(right_edge - x14_right, y17)  # Right footing corner
+            
+            # Apply plan offset
+            pt20[1] += plan_offset_y
+            pt21[1] += plan_offset_y
+            pt22[1] += plan_offset_y
+            pt23[1] += plan_offset_y
+            
+            # Draw right abutment footing
+            right_abt_points = [pt20, pt21, pt22, pt23, pt20]
+            msp.add_lwpolyline(right_abt_points, close=True)
+            
+        except Exception as e:
+            self.logger.error(f"Abutment plan drawing error: {str(e)}")
+    
+    def draw_bridge_deck_plan(self, msp, variables, h2pos, v2pos, p2t, plan_offset_y):
+        """Draw bridge deck outline in plan view"""
+        try:
+            # Bridge parameters
+            abtl = variables.get('abtl', 0)
+            lbridge = variables.get('lbridge', 100)
+            bridgew = variables.get('bridgew', 12)
+            datum = variables.get('datum', 95)
+            
+            # Plan coordinates for deck outline
+            yc = datum - 30.0
+            deck_width_half = bridgew / 2
+            
+            # Deck corners
+            deck_pt1 = p2t(abtl, yc + deck_width_half)          # Left-top
+            deck_pt2 = p2t(abtl + lbridge, yc + deck_width_half) # Right-top  
+            deck_pt3 = p2t(abtl + lbridge, yc - deck_width_half) # Right-bottom
+            deck_pt4 = p2t(abtl, yc - deck_width_half)          # Left-bottom
+            
+            # Apply plan offset
+            deck_pt1[1] += plan_offset_y
+            deck_pt2[1] += plan_offset_y
+            deck_pt3[1] += plan_offset_y
+            deck_pt4[1] += plan_offset_y
+            
+            # Draw deck outline
+            deck_points = [deck_pt1, deck_pt2, deck_pt3, deck_pt4, deck_pt1]
+            msp.add_lwpolyline(deck_points, close=True)
+            
+        except Exception as e:
+            self.logger.error(f"Bridge deck plan drawing error: {str(e)}")
     
     def generate_svg_preview(self, variables):
         """Generate SVG preview of the bridge design"""
