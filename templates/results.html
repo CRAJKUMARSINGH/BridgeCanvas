@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}Bridge Design Results - Bridge Design CAD{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white">
+                <h2 class="card-title mb-0">
+                    <i class="fas fa-check-circle me-2"></i>
+                    Bridge Design Results
+                </h2>
+            </div>
+            <div class="card-body p-4">
+                {% if results.success %}
+                    <div class="row">
+                        <div class="col-md-8">
+                            <h4 class="mb-3">
+                                <i class="fas fa-eye me-2 text-primary"></i>
+                                Design Preview
+                            </h4>
+                            
+                            <!-- SVG Preview -->
+                            <div class="border rounded p-3 mb-4" style="background-color: #f8f9fa;">
+                                {{ results.svg_content|safe }}
+                            </div>
+                            
+                            <!-- Parameter Summary -->
+                            <h5 class="mb-3">
+                                <i class="fas fa-list me-2 text-info"></i>
+                                Key Parameters
+                            </h5>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <table class="table table-sm">
+                                        <tbody>
+                                            <tr>
+                                                <td><strong>Bridge Length:</strong></td>
+                                                <td>{{ "%.2f"|format(results.variables.lbridge) }} m</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Number of Spans:</strong></td>
+                                                <td>{{ results.variables.nspan|int }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Carriageway Width:</strong></td>
+                                                <td>{{ "%.2f"|format(results.variables.ccbr) }} m</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Skew Angle:</strong></td>
+                                                <td>{{ "%.1f"|format(results.variables.skew) }}°</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Top Level:</strong></td>
+                                                <td>{{ "%.2f"|format(results.variables.toprl) }} m</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="col-md-6">
+                                    <table class="table table-sm">
+                                        <tbody>
+                                            <tr>
+                                                <td><strong>Soffit Level:</strong></td>
+                                                <td>{{ "%.2f"|format(results.variables.sofl) }} m</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Datum Level:</strong></td>
+                                                <td>{{ "%.2f"|format(results.variables.datum) }} m</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Scale 1:</strong></td>
+                                                <td>{{ results.variables.scale1|int }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Scale 2:</strong></td>
+                                                <td>{{ results.variables.scale2|int }}</td>
+                                            </tr>
+                                            <tr>
+                                                <td><strong>Abutment Length:</strong></td>
+                                                <td>{{ "%.2f"|format(results.variables.abtlen) }} m</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <h4 class="mb-3">
+                                <i class="fas fa-download me-2 text-warning"></i>
+                                Download Files
+                            </h4>
+                            
+                            <div class="card">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-file-alt fa-3x text-primary mb-3"></i>
+                                    <h5>DXF Drawing File</h5>
+                                    <p class="text-muted">Professional CAD drawing ready for import</p>
+                                    {% if results.dxf_filename %}
+                                        <a href="{{ url_for('download_file', filename=results.dxf_filename) }}" 
+                                           class="btn btn-primary">
+                                            <i class="fas fa-download me-2"></i>
+                                            Download DXF
+                                        </a>
+                                    {% else %}
+                                        <button class="btn btn-secondary" disabled>
+                                            <i class="fas fa-exclamation-triangle me-2"></i>
+                                            DXF Not Available
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <div class="card mt-3">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        File Information
+                                    </h6>
+                                    <ul class="list-unstyled small text-muted">
+                                        <li><strong>Original File:</strong> {{ filename }}</li>
+                                        <li><strong>Generated:</strong> {{ moment().format('YYYY-MM-DD HH:mm') }}</li>
+                                        <li><strong>Format:</strong> DXF (AutoCAD compatible)</li>
+                                        <li><strong>Validation:</strong> 
+                                            {% if results.validation.valid %}
+                                                <span class="text-success">Passed</span>
+                                            {% else %}
+                                                <span class="text-danger">Failed</span>
+                                            {% endif %}
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                            
+                            <div class="d-grid mt-3">
+                                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                                    <i class="fas fa-arrow-left me-2"></i>
+                                    Upload Another File
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Validation Results -->
+                    {% if results.validation and not results.validation.valid %}
+                        <div class="alert alert-warning mt-4">
+                            <h5 class="alert-heading">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                Validation Warnings
+                            </h5>
+                            <ul class="mb-0">
+                                {% for error in results.validation.errors %}
+                                    <li>{{ error }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+                    
+                {% else %}
+                    <!-- Error State -->
+                    <div class="text-center py-5">
+                        <i class="fas fa-exclamation-triangle fa-4x text-danger mb-4"></i>
+                        <h3>Processing Failed</h3>
+                        <p class="text-muted mb-4">{{ results.error }}</p>
+                        <a href="{{ url_for('index') }}" class="btn btn-primary">
+                            <i class="fas fa-arrow-left me-2"></i>
+                            Try Again
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detailed Parameters Modal -->
+<div class="modal fade" id="parametersModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-list-alt me-2"></i>
+                    All Parameters
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                {% if results.success %}
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Variable</th>
+                                    <th>Value</th>
+                                    <th>Unit</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for key, value in results.variables.items() %}
+                                    <tr>
+                                        <td><code>{{ key.upper() }}</code></td>
+                                        <td>{{ "%.3f"|format(value) if value is number else value }}</td>
+                                        <td>
+                                            {% if 'len' in key.lower() or 'width' in key.lower() or 'depth' in key.lower() %}
+                                                m
+                                            {% elif 'rl' in key.lower() or 'level' in key.lower() %}
+                                                m
+                                            {% elif 'skew' in key.lower() %}
+                                                °
+                                            {% else %}
+                                                -
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Show Parameters Button -->
+{% if results.success %}
+    <div class="text-center mt-4">
+        <button type="button" class="btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#parametersModal">
+            <i class="fas fa-table me-2"></i>
+            View All Parameters
+        </button>
+    </div>
+{% endif %}
+{% endblock %}
