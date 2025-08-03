@@ -60,14 +60,27 @@ class BridgeProcessor:
     def read_variables(self, file_path):
         """Read variables from Excel file"""
         try:
+            # Read Excel file without headers first
             df = pd.read_excel(file_path, header=None)
-            if df.shape[1] >= 3:
-                df.columns = ['Value', 'Variable', 'Description']
-            elif df.shape[1] == 2:
-                df.columns = ['Value', 'Variable']
-                df['Description'] = ''
+            
+            # Check if first row contains headers
+            if (df.iloc[0, 0] == 'Value' and df.iloc[0, 1] == 'Variable'):
+                # Skip header row and set proper column names
+                df = df.iloc[1:].reset_index(drop=True)
+                df.columns = ['Value', 'Variable', 'Description'] if df.shape[1] >= 3 else ['Value', 'Variable']
             else:
-                raise ValueError("Excel file must have at least 2 columns")
+                # No headers, set column names directly
+                if df.shape[1] >= 3:
+                    df.columns = ['Value', 'Variable', 'Description']
+                elif df.shape[1] == 2:
+                    df.columns = ['Value', 'Variable']
+                else:
+                    raise ValueError("Excel file must have at least 2 columns")
+            
+            # Add description column if missing
+            if 'Description' not in df.columns:
+                df['Description'] = ''
+                
             return df
         except Exception as e:
             self.logger.error(f"Error reading Excel file: {e}")
@@ -136,7 +149,7 @@ class BridgeProcessor:
         return variables
     
     def generate_dxf(self, variables):
-        """Generate DXF file from bridge parameters"""
+        """Generate DXF file from bridge parameters using comprehensive bridge drawing logic"""
         try:
             # Create DXF document
             doc = ezdxf.new("R2010", setup=True)
@@ -145,18 +158,45 @@ class BridgeProcessor:
             # Setup styles and dimensions
             self.setup_styles(doc)
             
-            # Calculate derived values
-            sc = variables.get('scale1', 1) / variables.get('scale2', 1)
-            skew1 = variables.get('skew', 0) * 0.0174532  # Convert to radians
+            # Calculate derived values like the original code
+            scale1 = variables.get('scale1', 186)
+            scale2 = variables.get('scale2', 1)
+            skew = variables.get('skew', 0)
+            datum = variables.get('datum', 95)
+            left = variables.get('left', 0)
+            right = variables.get('right', 100)
+            toprl = variables.get('toprl', 100)
             
-            # Generate bridge geometry
-            self.draw_bridge_elevation(msp, variables, sc, skew1)
-            self.draw_bridge_plan(msp, variables, sc, skew1)
+            # Scale calculations
+            hs = 1
+            vs = 1
+            sc = scale1 / scale2
+            vvs = 1000.0 / vs
+            hhs = 1000.0 / hs
+            skew1 = skew * 0.0174532  # Convert to radians
+            
+            # Position calculation functions
+            def vpos(a):
+                return datum + vvs * (a - datum)
+            
+            def hpos(a):
+                return left + hhs * (a - left)
+            
+            # Draw comprehensive bridge design using original logic
+            self.draw_layout_grid(msp, doc, variables, hpos, vpos, scale1, datum, left, toprl)
+            self.draw_bridge_superstructure(msp, variables, hpos, vpos, scale1, hhs)
+            self.draw_abutments_detailed(msp, variables, hpos, vpos, scale1)
+            self.draw_piers_detailed(msp, variables, hpos, vpos, scale1, hhs)
+            self.draw_approach_slabs(msp, variables, hpos, vpos, scale1)
             
             # Save DXF file
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"bridge_design_{timestamp}.dxf"
-            filepath = os.path.join("generated", filename)
+            
+            # Ensure generated directory exists (absolute path)
+            generated_dir = os.path.abspath("generated")
+            os.makedirs(generated_dir, exist_ok=True)
+            filepath = os.path.join(generated_dir, filename)
             doc.saveas(filepath)
             
             return filename
@@ -312,6 +352,306 @@ class BridgeProcessor:
                 
         except Exception as e:
             self.logger.error(f"Plan drawing error: {str(e)}")
+    
+    def draw_layout_grid(self, msp, doc, variables, hpos, vpos, scale1, datum, left, toprl):
+        """Draw layout grid and axes based on original code"""
+        try:
+            # Distance parameters
+            d1 = 20  # Distance in mm
+            xincr = variables.get('xincr', 5)
+            yincr = variables.get('yincr', 1)
+            right = variables.get('right', 100)
+            laslab = variables.get('laslab', 3.5)
+            
+            # Define grid points
+            pta1 = (left - laslab, datum)
+            pta2 = [hpos(variables.get('lbridge', 100) + laslab), datum]
+            ptb1 = (left, datum - d1 * scale1)
+            ptb2 = [hpos(right), datum - d1 * scale1]
+            ptc1 = [left, datum - 2 * d1 * scale1]
+            ptc2 = [hpos(right), datum - 2 * d1 * scale1]
+            ptd1 = [left, vpos(toprl)]
+            
+            # Draw X-axis and parallel lines
+            msp.add_line(pta1, pta2)
+            msp.add_line(ptb1, ptb2)
+            msp.add_line(ptc1, ptc2)
+            msp.add_line(ptc1, ptd1)  # Y-axis
+            
+            # Add text labels
+            ptb3 = (left - 25 * scale1, datum - d1 * 0.5 * scale1)
+            msp.add_text("BED LEVEL", dxfattribs={'height': 2.5 * scale1, 'insert': ptb3})
+            ptb3 = (left - 25 * scale1, datum - d1 * 1.5 * scale1)
+            msp.add_text("CHAINAGE", dxfattribs={'height': 2.5 * scale1, 'insert': ptb3})
+            
+            # Draw small lines on Y axis with levels
+            d2 = 2.5
+            small_line_start = (left - d2 * scale1, datum)
+            small_line_end = (left + d2 * scale1, datum)
+            msp.add_line(small_line_start, small_line_end)
+            
+            # Write levels on Y axis
+            nov = int((toprl - datum) // 1)
+            n = max(1, int(nov // yincr))
+            for a in range(n + 1):
+                lvl = datum + a * yincr
+                b1 = "{:.3f}".format(lvl)
+                pta1 = [left - 13 * scale1, vpos(lvl) - 1.0 * scale1]
+                text_height = 2.0 * scale1
+                msp.add_text(b1, dxfattribs={'height': text_height, 'rotation': 0, 'insert': pta1})
+                small_line_start = (left - d2 * scale1, vpos(lvl))
+                small_line_end = (left + d2 * scale1, vpos(lvl))
+                msp.add_line(small_line_start, small_line_end)
+            
+            # Write chainages on X axis
+            noh = right - left
+            n = int(noh // xincr)
+            d4 = 2 * d1
+            d5 = d4 - 2.0
+            d6 = d1 + 2.0
+            d7 = d1 - 2.0
+            d8 = d4 - 4.0
+            
+            for a in range(0, n + 2):
+                ch = left + a * xincr
+                b1 = f"{ch:.3f}"
+                pta1 = [scale1 + hpos(ch), datum - d8 * scale1]
+                msp.add_text(b1, dxfattribs={'height': 2.0 * scale1, 'insert': pta1, 'rotation': 90})
+                pta1 = [hpos(ch), datum - d4 * scale1]
+                pta2 = [hpos(ch), datum - d5 * scale1]
+                pta3 = [hpos(ch), datum - d6 * scale1]
+                pta4 = [hpos(ch), datum - d7 * scale1]
+                msp.add_line(pta1, pta2)
+                msp.add_line(pta3, pta4)
+                
+        except Exception as e:
+            self.logger.error(f"Layout grid drawing error: {str(e)}")
+    
+    def draw_bridge_superstructure(self, msp, variables, hpos, vpos, scale1, hhs):
+        """Draw bridge superstructure with spans"""
+        try:
+            spans = variables.get('abtl', 0)
+            span1 = variables.get('span1', 30)
+            nspan = int(variables.get('nspan', 1))
+            rtl = variables.get('rtl', 100)
+            sofl = variables.get('sofl', 95)
+            
+            # Draw main spans
+            x1 = hpos(spans)
+            y1 = vpos(rtl)
+            x2 = hpos(spans + span1)
+            y2 = vpos(sofl)
+            
+            # Create base span rectangle
+            pta1 = [x1 + 25.0, y1]
+            pta2 = [x2 - 25.0, y2]
+            
+            # Draw first span
+            msp.add_lwpolyline([pta1, [pta2[0], pta1[1]], pta2, [pta1[0], pta2[1]], pta1], close=True)
+            
+            # Copy for additional spans
+            for i in range(1, nspan):
+                new_pta1 = [pta1[0] + i * span1 * hhs, pta1[1]]
+                new_pta2 = [pta2[0] + i * span1 * hhs, pta2[1]]
+                msp.add_lwpolyline([new_pta1, [new_pta2[0], new_pta1[1]], new_pta2, [new_pta1[0], new_pta2[1]], new_pta1], close=True)
+                
+        except Exception as e:
+            self.logger.error(f"Superstructure drawing error: {str(e)}")
+    
+    def draw_abutments_detailed(self, msp, variables, hpos, vpos, scale1):
+        """Draw detailed abutments"""
+        try:
+            # Abutment parameters
+            abtl = variables.get('abtl', 0)
+            abtlen = variables.get('abtlen', 12)
+            alcw = variables.get('alcw', 0.75)
+            alcd = variables.get('alcd', 1.2)
+            dwth = variables.get('dwth', 0.3)
+            alfl = variables.get('alfl', 100)
+            alfb = variables.get('alfb', 10)
+            alfbl = variables.get('alfbl', 101)
+            altb = variables.get('altb', 10)
+            altbl = variables.get('altbl', 100.5)
+            alfo = variables.get('alfo', 0.5)
+            alfd = variables.get('alfd', 1.5)
+            albb = variables.get('albb', 5)
+            albbl = variables.get('albbl', 101.5)
+            lbridge = variables.get('lbridge', 100)
+            
+            # Left abutment
+            x1 = hpos(abtl - abtlen)
+            x2 = hpos(abtl)
+            y1 = vpos(alfl)
+            y2 = vpos(alfl + alcd)
+            
+            # Abutment cap
+            cap_points = [
+                [x1, y1],
+                [x2, y1],
+                [x2, y2],
+                [x1 + hpos(alcw) - hpos(0), y2],
+                [x1, y1]
+            ]
+            msp.add_lwpolyline(cap_points, close=True)
+            
+            # Front batter
+            front_batter_points = [
+                [x2, y2],
+                [x2, vpos(alfbl)],
+                [x2 + hpos(alfo) - hpos(0), vpos(altbl)],
+                [x2, vpos(altbl - alfd)],
+                [x1 + hpos(alcw) - hpos(0), vpos(altbl - alfd)],
+                [x1 + hpos(alcw) - hpos(0), y2]
+            ]
+            msp.add_lwpolyline(front_batter_points, close=True)
+            
+            # Right abutment (mirror)
+            right_x1 = hpos(abtl + lbridge)
+            right_x2 = hpos(abtl + lbridge + abtlen)
+            
+            right_cap_points = [
+                [right_x1, y1],
+                [right_x2, y1],
+                [right_x2, y2],
+                [right_x2 - hpos(alcw) + hpos(0), y2],
+                [right_x1, y1]
+            ]
+            msp.add_lwpolyline(right_cap_points, close=True)
+            
+        except Exception as e:
+            self.logger.error(f"Abutment drawing error: {str(e)}")
+    
+    def draw_piers_detailed(self, msp, variables, hpos, vpos, scale1, hhs):
+        """Draw detailed piers with caps and footings"""
+        try:
+            nspan = int(variables.get('nspan', 1))
+            if nspan <= 1:
+                return  # No piers needed for single span
+                
+            abtl = variables.get('abtl', 0)
+            span1 = variables.get('span1', 30)
+            capw = variables.get('capw', 1.2)
+            capt = variables.get('capt', 100.5)
+            capb = variables.get('capb', 99.3)
+            piertw = variables.get('piertw', 0.6)
+            battr = variables.get('battr', 10)
+            pierst = variables.get('pierst', 5)
+            futrl = variables.get('futrl', 90)
+            futd = variables.get('futd', 2)
+            futw = variables.get('futw', 2.5)
+            futl = variables.get('futl', 3.5)
+            skew = variables.get('skew', 0)
+            
+            # Draw piers between spans
+            for i in range(1, nspan):
+                pier_chainage = abtl + i * span1
+                pier_x = hpos(pier_chainage)
+                
+                # Pier cap
+                cap_left = pier_x - hpos(capw/2) + hpos(0)
+                cap_right = pier_x + hpos(capw/2) - hpos(0)
+                cap_top = vpos(capt)
+                cap_bottom = vpos(capb)
+                
+                cap_points = [
+                    [cap_left, cap_bottom],
+                    [cap_right, cap_bottom],
+                    [cap_right, cap_top],
+                    [cap_left, cap_top],
+                    [cap_left, cap_bottom]
+                ]
+                msp.add_lwpolyline(cap_points, close=True)
+                
+                # Pier column with batter
+                pier_top_left = pier_x - hpos(piertw/2) + hpos(0)
+                pier_top_right = pier_x + hpos(piertw/2) - hpos(0)
+                pier_height = capb - futrl - futd
+                
+                # Calculate bottom width with batter
+                batter_expansion = pier_height / battr
+                pier_bottom_left = pier_top_left - hpos(batter_expansion) + hpos(0)
+                pier_bottom_right = pier_top_right + hpos(batter_expansion) - hpos(0)
+                
+                pier_points = [
+                    [pier_top_left, cap_bottom],
+                    [pier_top_right, cap_bottom],
+                    [pier_bottom_right, vpos(futrl + futd)],
+                    [pier_bottom_left, vpos(futrl + futd)],
+                    [pier_top_left, cap_bottom]
+                ]
+                msp.add_lwpolyline(pier_points, close=True)
+                
+                # Pier footing
+                footing_left = pier_x - hpos(futw/2) + hpos(0)
+                footing_right = pier_x + hpos(futw/2) - hpos(0)
+                footing_top = vpos(futrl + futd)
+                footing_bottom = vpos(futrl)
+                
+                footing_points = [
+                    [footing_left, footing_bottom],
+                    [footing_right, footing_bottom],
+                    [footing_right, footing_top],
+                    [footing_left, footing_top],
+                    [footing_left, footing_bottom]
+                ]
+                msp.add_lwpolyline(footing_points, close=True)
+                
+        except Exception as e:
+            self.logger.error(f"Pier drawing error: {str(e)}")
+    
+    def draw_approach_slabs(self, msp, variables, hpos, vpos, scale1):
+        """Draw approach slabs"""
+        try:
+            abtl = variables.get('abtl', 0)
+            nspan = int(variables.get('nspan', 1))
+            span1 = variables.get('span1', 30)
+            laslab = variables.get('laslab', 3.5)
+            rtl = variables.get('rtl', 100)
+            apthk = variables.get('apthk', 0.23)
+            wcth = variables.get('wcth', 0.075)
+            
+            # Left approach slab
+            x1_left = hpos(abtl - laslab)
+            x2_left = hpos(abtl)
+            y1_left = vpos(rtl)
+            y2_left = vpos(rtl - apthk)
+            
+            left_slab_points = [
+                [x1_left, y1_left],
+                [x2_left, y1_left],
+                [x2_left, y2_left],
+                [x1_left, y2_left],
+                [x1_left, y1_left]
+            ]
+            msp.add_lwpolyline(left_slab_points, close=True)
+            
+            # Right approach slab
+            x1_right = hpos(abtl + (nspan * span1))
+            x2_right = hpos(abtl + (nspan * span1) + laslab)
+            y1_right = vpos(rtl)
+            y2_right = vpos(rtl - apthk)
+            
+            right_slab_points = [
+                [x1_right, y1_right],
+                [x2_right, y1_right],
+                [x2_right, y2_right],
+                [x1_right, y2_right],
+                [x1_right, y1_right]
+            ]
+            msp.add_lwpolyline(right_slab_points, close=True)
+            
+            # Wearing course (continuous across all slabs)
+            wearing_course_points = [
+                [x1_left, y1_left],
+                [x2_right, y1_right],
+                [x2_right, vpos(rtl + wcth)],
+                [x1_left, vpos(rtl + wcth)],
+                [x1_left, y1_left]
+            ]
+            msp.add_lwpolyline(wearing_course_points, close=True)
+            
+        except Exception as e:
+            self.logger.error(f"Approach slab drawing error: {str(e)}")
     
     def generate_svg_preview(self, variables):
         """Generate SVG preview of the bridge design"""
