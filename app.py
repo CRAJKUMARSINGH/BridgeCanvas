@@ -7,7 +7,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 from bridge_processor import BridgeProcessor
 import traceback
-
+from smart_title import smart_recenter_title
+smart_recenter_title(drawing.elements)
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 
@@ -137,4 +138,14 @@ with app.app_context():
     db.create_all()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    import traceback
+    import sys
+    
+    try:
+        port = int(os.getenv("PORT", 5000))
+        app.logger.info(f"Starting BridgeCanvas server on port {port}")
+        app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
+    except Exception as e:
+        app.logger.error(f"Failed to start server: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        sys.exit(1)

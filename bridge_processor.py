@@ -4,6 +4,7 @@ import os
 import math
 from datetime import datetime
 import logging
+from smart_title import smart_recenter_title
 
 class BridgeProcessor:
     def __init__(self):
@@ -972,31 +973,21 @@ class BridgeProcessor:
     def draw_border_and_title(self, msp, doc, variables, scale1, left, datum):
         """Add professional drawing border and title block with proportional fonts"""
         try:
-            # Create text styles with proportional fonts
-            if 'ARIAL' not in doc.styles:
-                doc.styles.new('ARIAL', dxfattribs={'font': 'arial.ttf', 'width': 1.0})
-            if 'ARIAL_BOLD' not in doc.styles:
-                doc.styles.new('ARIAL_BOLD', dxfattribs={'font': 'arialbd.ttf', 'width': 1.0})
-            if 'TIMES' not in doc.styles:
-                doc.styles.new('TIMES', dxfattribs={'font': 'times.ttf', 'width': 1.0})
-            
             # Get drawing extents
-            lbridge = variables.get('lbridge', 100)
-            toprl = variables.get('toprl', 105)
+            drawing_extents = msp.get_geometric_data('extents')
+            if not drawing_extents:
+                return
             
-            # Define border coordinates (A1 size equivalent in mm)
-            border_margin = 50 * scale1
-            title_height = 200 * scale1
+            drawing_left = drawing_extents[0][0]
+            drawing_right = drawing_extents[1][0]
+            drawing_bottom = drawing_extents[0][1]
+            drawing_top = drawing_extents[1][1]
             
-            # Calculate actual drawing extents first
-            drawing_left = left - 200 * scale1
-            drawing_right = left + lbridge + 200 * scale1
-            drawing_bottom = datum - 6000  # Plan view area (reduced)
-            drawing_top = toprl + 100 * scale1
-            
-            # Create proper A1-sized border (594mm x 841mm equivalent)
             drawing_width = drawing_right - drawing_left
             drawing_height = drawing_top - drawing_bottom
+            
+            # Title block dimensions
+            title_height = 150 * scale1
             
             # Center the drawing content within standard border
             border_width = max(drawing_width + 400 * scale1, 1000 * scale1)  # Minimum width
@@ -1007,6 +998,32 @@ class BridgeProcessor:
             border_right = border_left + border_width
             border_bottom = drawing_bottom - 100 * scale1
             border_top = border_bottom + border_height
+            
+            # Create a list to hold title block elements for recentering
+            title_elements = []
+            
+            # Title block area (bottom right corner)
+            title_width = 400 * scale1
+            title_x = border_right - title_width - 20 * scale1  # 20 is inner_margin
+            title_y = border_bottom + 20 * scale1  # 20 is inner_margin
+            
+            # Add title block to elements list for recentering
+            title_block = {
+                'x': title_x,
+                'y': title_y,
+                'width': title_width,
+                'height': title_height,
+                'tag': 'title_block'  # This tag is used by smart_recenter_title
+            }
+            title_elements.append(title_block)
+            
+            # Apply smart recenter to position the title block
+            smart_recenter_title(title_elements)
+            
+            # Update title block position based on recentering
+            if title_elements:
+                title_x = title_elements[0]['x']
+                title_y = title_elements[0]['y']
             
             # Draw main border rectangle
             border_points = [
@@ -1029,22 +1046,17 @@ class BridgeProcessor:
             ]
             msp.add_lwpolyline(inner_border_points, close=True, dxfattribs={'color': 7})
             
-            # Title block area (bottom right corner)
-            title_width = 400 * scale1
-            title_x = border_right - title_width - inner_margin
-            title_y = border_bottom + inner_margin
-            
-            # Title block border
+            # Title block border (using recentered position)
             title_block_points = [
                 [title_x, title_y],
-                [border_right - inner_margin, title_y],
-                [border_right - inner_margin, title_y + title_height],
+                [title_x + title_width, title_y],
+                [title_x + title_width, title_y + title_height],
                 [title_x, title_y + title_height],
                 [title_x, title_y]
             ]
             msp.add_lwpolyline(title_block_points, close=True, dxfattribs={'color': 7})
             
-            # Title block content
+            # Title block content (using recentered position)
             self.add_title_block_content(msp, variables, title_x, title_y, title_width, title_height, scale1)
             
             # Drawing title
@@ -1055,6 +1067,7 @@ class BridgeProcessor:
             
         except Exception as e:
             self.logger.error(f"Border and title drawing error: {str(e)}")
+            self.logger.error(traceback.format_exc())
     
     def add_title_block_content(self, msp, variables, x, y, width, height, scale1):
         """Add content to the title block"""

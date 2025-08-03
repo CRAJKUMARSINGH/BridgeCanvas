@@ -1,0 +1,18 @@
+You cannot deploy a Flask app on Streamlit Community Cloud—the service only supports Streamlit apps (, 
+).
+If you try to push a file that contains app.run(...) (Flask), the container will repeatedly crash and you’ll see the “Runner tired / Nothing happens” symptom you described.
+What you can do instead:
+
+    Keep the two frameworks separate
+    • Host your Flask API on a different platform (Heroku, Railway, Render, PythonAnywhere, etc.).
+    • Build a Streamlit frontend that calls the Flask endpoints with requests.
+    • Deploy the Streamlit frontend on Streamlit Cloud and point it to the live Flask URL instead of localhost (
+
+, , 
+).
+If you only need a web interface, rewrite the app in pure Streamlit and drop Flask entirely.
+If you insist on a single codebase, containerise both services with Docker and deploy the whole stack to a VPS (AWS EC2, DigitalOcean, etc.) (
+
+    ).
+
+In short: Streamlit Cloud ≠ Flask host. Pick one of the above patterns and you’ll be up and running.
