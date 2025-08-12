@@ -4,6 +4,7 @@ import os
 import math
 from datetime import datetime
 import logging
+import traceback
 from smart_title import smart_recenter_title
 
 class BridgeProcessor:
@@ -41,7 +42,7 @@ class BridgeProcessor:
                 variables['project_name'] = 'BRIDGE PROJECT'
             
             # Generate DXF file
-            dxf_filename = self.generate_dxf(variables)
+            dxf_filename, cleanup_stats = self.generate_dxf(variables)
             
             # Generate SVG for web display
             svg_content = self.generate_svg_preview(variables)
@@ -51,7 +52,8 @@ class BridgeProcessor:
                 'variables': variables,
                 'dxf_filename': dxf_filename,
                 'svg_content': svg_content,
-                'validation': validation_result
+                'validation': validation_result,
+                'cleanup': cleanup_stats,
             }
             
         except Exception as e:
@@ -202,6 +204,9 @@ class BridgeProcessor:
             # Add drawing border and title block
             self.draw_border_and_title(msp, doc, variables, scale1, left, datum)
             
+            # Cleanup degenerate/orphan entities before saving
+            cleanup_stats = self.remove_orphan_points_and_degenerate_entities(doc)
+            
             # Save DXF file
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             filename = f"bridge_design_{timestamp}.dxf"
@@ -212,11 +217,106 @@ class BridgeProcessor:
             filepath = os.path.join(generated_dir, filename)
             doc.saveas(filepath)
             
-            return filename
+            return filename, cleanup_stats
             
         except Exception as e:
             self.logger.error(f"DXF generation error: {str(e)}")
             raise
+    
+    def remove_orphan_points_and_degenerate_entities(self, doc, eps: float = 1e-6):
+        """Remove orphan/degenerate entities from the DXF document.
+        - Zero-length LINEs
+        - LWPOLYLINEs with <2 distinct vertices or with near-zero extents
+        - Zero-radius CIRCLEs and ARCs
+        - POINT entities (treated as orphan display artifacts)
+        Returns a stats dict with removed counts per type.
+        """
+        msp = doc.modelspace()
+        removed = {
+            'lines_removed': 0,
+            'polylines_removed': 0,
+            'circles_removed': 0,
+            'arcs_removed': 0,
+            'points_removed': 0,
+        }
+        
+        # Collect to avoid modifying while iterating
+        to_remove = []
+        
+        # Zero-length LINEs
+        for e in list(msp.query('LINE')):
+            try:
+                s = e.dxf.start
+                t = e.dxf.end
+                dx = float(s.x) - float(t.x)
+                dy = float(s.y) - float(t.y)
+                dz = float(s.z) - float(t.z)
+                if dx*dx + dy*dy + dz*dz <= eps*eps:
+                    to_remove.append(('LINE', e))
+            except Exception:
+                continue
+        
+        # Degenerate LWPOLYLINEs
+        for e in list(msp.query('LWPOLYLINE')):
+            try:
+                pts = [tuple(p[:2]) for p in e.get_points('xy')]
+                if len(pts) < 2:
+                    to_remove.append(('LWPOLYLINE', e))
+                    continue
+                xs = [p[0] for p in pts]
+                ys = [p[1] for p in pts]
+                if (max(xs) - min(xs))**2 + (max(ys) - min(ys))**2 <= eps*eps:
+                    to_remove.append(('LWPOLYLINE', e))
+            except Exception:
+                continue
+        
+        # Zero-radius CIRCLEs
+        for e in list(msp.query('CIRCLE')):
+            try:
+                r = float(e.dxf.radius)
+                if r <= eps:
+                    to_remove.append(('CIRCLE', e))
+            except Exception:
+                continue
+        
+        # Zero-radius ARCs
+        for e in list(msp.query('ARC')):
+            try:
+                r = float(e.dxf.radius)
+                if r <= eps:
+                    to_remove.append(('ARC', e))
+            except Exception:
+                continue
+        
+        # Remove POINTs (commonly stray)
+        for e in list(msp.query('POINT')):
+            to_remove.append(('POINT', e))
+        
+        # Execute removals and accumulate stats
+        for typ, ent in to_remove:
+            try:
+                ent.destroy()
+                if typ == 'LINE':
+                    removed['lines_removed'] += 1
+                elif typ == 'LWPOLYLINE':
+                    removed['polylines_removed'] += 1
+                elif typ == 'CIRCLE':
+                    removed['circles_removed'] += 1
+                elif typ == 'ARC':
+                    removed['arcs_removed'] += 1
+                elif typ == 'POINT':
+                    removed['points_removed'] += 1
+            except Exception:
+                # Ignore failures; continue cleaning
+                continue
+        
+        # Log for diagnostics
+        try:
+            self.logger.info(f"Cleanup removed: {removed}")
+        except Exception:
+            pass
+        
+        return removed
     
     def setup_styles(self, doc):
         """Setup DXF styles and dimension styles"""
