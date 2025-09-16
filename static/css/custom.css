@@ -203,3 +203,10 @@ footer {
     background-image: radial-gradient(circle, #dee2e6 1px, transparent 1px);
     background-size: 20px 20px;
 }
+
+/* Navbar logo */
+.navbar-brand img {
+    height: 28px;
+    width: auto;
+    display: inline-block;
+}

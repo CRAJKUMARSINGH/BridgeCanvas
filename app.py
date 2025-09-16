@@ -7,8 +7,11 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 from bridge_processor import BridgeProcessor
 import traceback
+<<<<<<< HEAD
 # Removed problematic smart_recenter_title call
 # smart_recenter_title(drawing.elements)
+=======
+>>>>>>> 1aa490f8b26e32e7cf470081de9081c0e4372e40
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
 
